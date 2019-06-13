@@ -693,7 +693,7 @@ bemDom.declBlock('my-block',
 * *js* – параметры (объект/булево – если не false, то миксует i-bem и добавляет содержимое в data-bem:
 
 ```
-// BEMJSON
+//BEMJSON
 {
    block: 'link',
    js: true
@@ -706,7 +706,7 @@ bemDom.declBlock('my-block',
 * *attrs* - хеш HTML-атрибутов (объект. спец. символы экранируются: )
 
 ```
-// BEMJSON
+//BEMJSON
 {
     attrs: {
         id: 'anchor',
