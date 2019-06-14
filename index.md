@@ -865,3 +865,325 @@ block('control')(
         value="miripiruni" id="username-control" />
 </div>
 ```
+
+## Тело шаблона
+
+В процессе обхода входных данных bem-xjst строит КОНТЕКСТ, который **содержит**:
+* сведения о БЭМ-сущности
+* текущий узел 
+* хелперы
+* кастомные поля
+* методы для управления шаблонизацией
+
+Если тело шаблона является ФУНКЦЕЙ, то она вызывается с двумя аргументами:
+* контекст (this в теле шаблона)
+* текущий узел, к которому привязан шаблон (this.ctx)
+
+```
+block('link') ({
+    attrs: function(node, ctx) {
+        return {
+            // тоже самое что и this.ctx.url
+            href: ctx.url,
+
+            // тоже самое что и this.position
+            'data-position': node.position
+        };
+    }
+});
+```
+
+Поддержка СТРЕЛОЧНЫХ функций (можно использовать вместо return)
+
+#### Нормализация сведений о сущности
+
+В узле может не быть каких-то сведений (например, у дочернего элемента (находящегося под ключом content) не указан блок). Шаблонизатор исправляет это. Он следит за следующими полями:
+1. this.block
+2. this.elem
+3. this.mods
+4. this.elemMods
+
+Поэтому не нужно выполнять на них проверку.
+
+#### Текущий узел
+
+Доступен в поле this.ctx:
+
+```
+{
+    block: 'company',
+    name: 'yandex'
+}
+
+block('company')({
+    attrs: (node, ctx) => ({
+        id: ctx.name,
+        name: ctx.name
+    })
+});
+
+```
+
+Результат:
+
+```
+<div class="company" id="yandex" name="yandex"></div>
+```
+
+#### Хелперы
+
+**Методы экранирования:**
+* *xmlEscape* - принимает строку, возвращает её же, но с хаэкранированными символами `&`, `<`, `>`. Если пришло невалидное значение, то вернёт пустую строку. Если не строка - то приведет к строке. Используется в с ключом `def`:
+```
+block('button')({
+    def: (node) => node.xmlEscape('<b>&</b>')
+});
+```
+* *attrEscape* - то же самое, но символы `"` и `&`. 
+* *jsAttrEscape* - символы `'` и `&`.
+
+**Определение позиции:**
+* *this.position* - ЧИСЛО, соответствующее порядковому номеру сущности среди её соседей в дереве (одноранговых). При вычислении:
+    * нумеруются только те, у кого есть БЭМ-сущность
+    * начиная с 1
+    * другие сущности остаются без номера
+zB:
+```
+{
+    block: 'page',                // this.position === 1
+    content: [
+        { block: 'head' },        // this.position === 1
+        'text',                   // this.position === undefined
+        {
+            block: 'menu',        // this.position === 2
+            content: [
+                { elem: 'item' }, // this.position === 1
+                'text',           // this.position === undefined
+                { elem: 'item' }, // this.position === 2
+                { elem: 'item' }  // this.position === 3
+            ]
+        }
+    ]
+}
+```
+
+Дерево может быть ДОСТРОЕНО в процессе ВЫПОЛНЕНИЯ в режиме `def` или `content`. Позиция учитывается. `this.isLast()` НЕ сработает, если после эелемента есть что-то, даже если это НЕ БЭМ-сущность.
+* *isFirst* - проверка, первый ли узел
+* *isLast* - проверка, последний ли узел
+
+**Генератор уникальных id**
+* *this.generateId()*:
+```
+block('input')({
+    content: (node, ctx) => {
+        var id = node.generateId();
+
+        return [
+            {
+                tag: 'label',
+                attrs: { for: id },
+                content: ctx.label
+            },
+            {
+                tag: 'input',
+                attrs: {
+                    id: id,
+                    value: ctx.value
+                }
+            }
+        ];
+    }
+});
+```
+
+Результат:
+
+```
+<div class="input">
+    <label for="uniq14563433829878">Имя</label>
+    <input id="uniq14563433829878" value="Иван" />
+</div>
+```
+
+**Ещё:**
+* *this.isSimple({*} arg)* - является ли `arg` примитивом
+* *this.isShortTag({String} tagName)* - нужен ли для `tagName` закрывающий тэг
+* *this.extend({Object} o1, {Object} o2)* - создаёт новый объект, куда складывает все поля из `o1`, потом из `o2`
+* *this.reapply()* - позволяет шаблонизировать произвольные данные, находять в самом шаблоне, а на выходе получить строку:
+```
+{ block: 'a' }
+block('a')({
+    js: (node) => ({
+        template: node.reapply({ block: 'b', mods: { m: 'v' } })
+    })
+});
+```
+Результат:
+
+```
+<div class="a i-bem" data-bem='{
+    "a":{"template":"<div class=\"b b_m_v\"></div>"}}'></div>
+```
+
+#### Кастомные поля:
+
+Контекст можно расширить при помощи прототипа:
+
+```
+var bemxjst = require('bem-xjst');
+var templates = bemxjst.bemhtml.compile('');
+
+// Расширяем прототип контекста
+templates.BEMContext.prototype.hi = function(name) {
+    return 'Hello, ' + username;
+};
+
+// Добавляем шаблоны
+templates.compile(() => {
+    block('b')({
+        content: (node) => node.hi('templates')
+    });
+});
+
+var bemjson = { block: 'b' };
+
+// Применяем шаблоны
+var html = templates.apply(bemjson);
+```
+
+Результат:
+
+```
+<div class="b">Hello, templates</div>
+```
+
+#### Таннелинг дочерним узлам
+
+Можно так же передать ДОЧЕРНИМ сущностям какие-либо флаги через ключ `extend`:
+
+```
+[
+  {
+      block: 'qa-form',
+      content: [
+          { block: 'input' },
+          …
+      ]
+  },
+  { block: 'input' }
+]
+
+// выставляем флаг _inQaForm, который будет доступен
+// из всех узлов внутри данного
+block('qa-form')({ extend: { _inQaForm: true } });
+
+block('input')
+  // подпредикат, который проверяет, что флаг взведен
+  .match((node) => node._inQaForm)
+  .mix()({ mods: { inside: 'qa' } });
+```
+
+Результат:
+
+```
+<div class="qa-form">
+    <div class="input input_inside_qa"></div>
+</div>
+<div class="input"></div>
+```
+
+## Runtime
+
+СУТЬ: шаблонизатор рекурсивно объодит дерево элементов в прямом порядке и ищет шаблон для каждого элемента. В теле шаблона он может быть заменен на другой или дополнен. Если шаблонов нет, то сгенерирует результат по умолчанию.
+
+Шаблоны располагаются в упорядоченном списке. Приоритет отдаётся последним. Для каждого узла проверяются предикаты каждого шаблона, для этого выполняются подпредикаты. Если все они вернули true - поиск прекращается и выполняется текущий шаблон. Если шаблон не найден, то выполняется поведение по умолчанию.
+
+**Чтобы установить шаблон на все сущности, следует указать** `'*'`:
+
+```
+[
+    { block: 'header' },
+    { block: 'link', mix: [{ block : 'title' }], counter: '1549865' },
+    { block: 'snippet', counter: '1549865' }
+]
+```
+
+```
+block('*')
+    .match((node, ctx) => ctx.counter)({
+        mix: (node, ctx) => ({
+            block: 'counter', js: { id: ctx.counter }
+        })
+    })
+```
+
+Результат:
+
+```
+<div class="header"></div>
+<div class="link counter title i-bem" data-bem='{"counter":{"id":"1549865"}}'></div>
+<div class="snippet counter i-bem" data-bem='{"counter":{"id":"1549865"}}'></div>
+```
+
+## Инструкции выполнения
+
+* *apply* - `apply(modeName, changes)` - *modeName* - название режима, над которым будут производиться действия, *changes* - объект, которым расширяется контекст выполнения. **Применяется** для вызова стандартного или пользовательского режима текущего узла.
+
+```
+{ block: 'button' }
+
+block('button')({
+    test: (node, ctx) => node.tmp + ctx.foo,
+    def: () => apply('test', {
+        tmp: 'ping',
+        'ctx.foo': 'pong'
+    })
+});
+```
+
+Если используется пользовательский режим (например, size), то через вызов `apply('size')` его можно переопределить, например:
+
+```
+block('my-block')({
+    size: 'm',
+    content: () => ({
+        block: 'button',
+        size: apply('size')
+    })
+});
+
+block('my-block').mode('size')('l');
+
+block('my-block').mode('size')('s');
+```
+
+* *applyNext* - `applyNext(changes)` - *changes* - объект, которым расширяется контекст выполнения. **Применяется:** для возвращения результата работы следующего по приоритету узла в текущем режиме для текущего узла:
+
+```
+block('link')({ tag: 'a' });
+block('link')({
+    tag: () => {
+        var res = applyNext(); // res === 'a'
+        return res;
+    }
+});
+```
+
+* *applyCtx* - `applyCtx(bemjson, changes)` - *bemjson* - входные данные, *changes* как всегда. **Применяется:** для модификации текущего фрагмента `this.ctx` с применением шаблона `apply()`:
+
+```
+{ block: 'header', mix: [{ block: 'sticky' }] }
+
+block('header')({
+    def: (node, ctx) => applyCtx(node.extend(ctx, {
+        block: 'layout',
+        mix: [{ block: 'header' }].concat(ctx.mix || [])
+    }));
+});
+```
+
+Результат:
+
+```
+<div class="layout header sticky"></div>
+```
