@@ -1235,3 +1235,118 @@ block('header')({
 
 # BEM + REACT
 
+## Библиотека *className*
+
+Функция **`cn(arg)`**, которая генерирует имя класса в соответствии с технологией БЭМ. При передаче 1 аргумента - БЛОКА, с 2 - ЭЛЕМЕНТА. Возвращает всегда ФУНКЦИЮ! Вызов возвращённой функции возвращает всегда СТРОКУ! Если вызывалась с 1 аргументом, то при вызове возвращённой функции вернет имя ЭЛЕМЕНТА.При вызове возвращенной функции с объектом в качестве аргумента возвращает имя МОДИФИКАТОРА.
+
+```
+import { cn } from '@bem-react/classname';
+
+const cat = cn('Cat');
+
+cat(); // Cat
+cat({ size: 'm' }); // Cat Cat_size_m
+cat('Tail'); // Cat-Tail
+cat('Tail', { length: 'small' }); // Cat-Tail Cat-Tail_length_small
+
+const dogPaw = cn('Dog', 'Paw');
+
+dogPaw(); // Dog-Paw
+dogPaw({ color: 'black', exists: true }); // Dog-Paw Dog-Paw_color_black Dog-Paw_exists
+```
+
+Для примиксовывания - функция **`classnames(arg)`**:
+
+```
+import { classnames } from '@bem-react/classname';
+classnames('Block', 'Mix', undefined, 'Block'); // 'Block Mix'
+```
+
+Для изменения самого наименования - функция **`withNaming(obj)`**:
+
+```
+import { withNaming } from '@bem-react/classname';
+
+const cn = withNaming({ n: 'ns-', e: '__', m: '_' });
+
+cn('block', 'elem')({ theme: 'default' }); // ns-block__elem_theme_default
+```
+
+## Библиотека *core*
+
+Функция **`withBemMod(blockName, condition, JSX-component)`**
+
+Аргументы:
+* *blockName* - строка - имя изменяемого блока
+* *condition* - объект - условие, при котором будет применяться модификатор. Вид - `{type: 'text'}` - если true, то функция сработает. True - если в JSX в параметрах есть `type='text'`
+* *JSX-component* - разметка JSX, которая применится к блоку, если предыдущее условие true
+
+Функции **`compose(bemModFuncs)(Base)`**, **`composeU(bemModFuncs)(Base)`**. В случае, если используются модификаторы с одинковым значением, то используется `composeU(arg)` (может быть вложена в качестве аргумента в `compose(arg)`, тогда *Base* не указывается). Главное - ОБРАТИТЬ ВНИМАНИЕ НА ПРАВИЛЬНЫЙ ПОРЯДОК! То, что указано ПЕРВЫМ, будет первым отрендерино!
+
+Аргументы:
+* *bemModFuncs* - функция/функции, возвращаемые из `withBemMod()`
+* *Base* - компонент/класс/функция - исходный блок
+
+
+Все функции при этом разбрасываются по разным файлам/папкам.
+
+Пример:
+
+```
+//Components/Button/ButtonDef.js
+
+export const ButtonDef: = ({ text, className }) => ( 
+  <div className={className}>{text}</div>
+);
+```
+
+```
+//Components/Button/_type/Button_type_link.js
+
+const ButtonLink = (Base, { text, className }) => (
+  // className === 'Button Button_type_link'
+  <a className={className}>{text}</a>
+);
+
+export const ButtonTypeLink = withBemMod('Button', { type: 'link' }, ButtonLink);
+```
+
+```
+//Components/Button/_theme/Button_theme_action.js
+
+export const ButtonThemeAction = withBemMod('Button', { theme:  'action' });
+```
+
+```
+//Components/Button/Button.js ???
+
+export const Button = compose(
+  composeU(withButtonThemeAction, withButtonThemeDefault), //withButtonThemeDefault для примера использования
+    withButtonTypeLink,
+  )(ButtonDef);
+```
+
+```
+//App.js
+
+export const App = () => {
+  <div className="App">
+    <Button text="I'm basic" />   
+    // Renders into HTML as: <div class="Button">I'm Basic</div>                                    
+
+    <Button text="I'm type link" type="link" />    
+    // Renders into HTML as: <a class="Button Button_type_link">I'm type link</a>
+
+    <Button text="I'm theme action" theme="action" />
+    // Renders into HTML as: <div class="Button Button_theme_action">I'm theme action</div>
+
+    <Button text="I'm all together" theme="action" type="link" />
+    // Renders into HTML as: <a class="Button Button_theme_action Button_type_link">I'm all together</a>
+  </div>
+}
+```
+
+## Библиотека *Dependency Injection (DI)*
+
+
+              
