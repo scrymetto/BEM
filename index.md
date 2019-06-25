@@ -1237,7 +1237,7 @@ block('header')({
 
 ## Библиотека *className*
 
-Функция **`cn(arg)`**, которая генерирует имя класса в соответствии с технологией БЭМ. При передаче 1 аргумента - БЛОКА, с 2 - ЭЛЕМЕНТА. Возвращает всегда ФУНКЦИЮ! Вызов возвращённой функции возвращает всегда СТРОКУ! Если вызывалась с 1 аргументом, то при вызове возвращённой функции вернет имя ЭЛЕМЕНТА.При вызове возвращенной функции с объектом в качестве аргумента возвращает имя МОДИФИКАТОРА.
+Функция **`cn(arg)`**, которая генерирует имя класса в соответствии с технологией БЭМ. При передаче 1 аргумента - БЛОКА, с 2 - ЭЛЕМЕНТА. Возвращает всегда ФУНКЦИЮ! Вызов возвращённой функции возвращает всегда СТРОКУ! Если вызывалась с 1 аргументом, то при вызове возвращённой функции вернет имя ЭЛЕМЕНТА.При вызове возвращенной функции с объектом в качестве аргумента возвращает имя МОДИФИКАТОРА. При вызове возвращённой функции с МАССИВОМ в качестве второго аргумента, все вложенные строки массива ПРИМИКСУЮТСЯ (второй пример)
 
 ```
 import { cn } from '@bem-react/classname';
@@ -1255,7 +1255,19 @@ dogPaw(); // Dog-Paw
 dogPaw({ color: 'black', exists: true }); // Dog-Paw Dog-Paw_color_black Dog-Paw_exists
 ```
 
-Для примиксовывания - функция **`classnames(arg)`**:
+```
+let blockButton = cn('Button'); //function
+let mix = blockButton(null, ['Mix']); // Button Mix
+```
+
+или:
+
+```
+let blockButton = cn('Button'); //function
+let mix = blockButton({theme: 'red'}, ['Mix']); // Button Button_theme_red Mix
+```
+
+Для примиксовывания - функция **`classnames(arg)`** (или пример выше):
 
 ```
 import { classnames } from '@bem-react/classname';
@@ -1281,12 +1293,81 @@ cn('block', 'elem')({ theme: 'default' }); // ns-block__elem_theme_default
 * *condition* - объект - условие, при котором будет применяться модификатор. Вид - `{type: 'text'}` - если true, то функция сработает. True - если в JSX в параметрах есть `type='text'`
 * *JSX-component* - разметка JSX, которая применится к блоку, если предыдущее условие true
 
+Для динамического подключения **только лишь CSS**:
+1) указывем первый аргумент - строку с названием блока, к которому будет применяться модификатор
+2) указывем второй аргумент в виде объекта - ключ - проп, который будет передаваться JSX, занчение - значение пропа в JSX (пример см. ниже)
+3) импортируем css в файл, в котором описываем withBemMod
+4) импортируем withBemMod в файл, в котором описываем JSX
+5) *withBemMod* возвращает ФУНКЦИЮ, поэтому в конечном компоненте необходимо передать в неё БАЗУ, вокруг которой будет оборачиваться функция (см. второй пример)
+```
+const ButtonTypeLink = withBemMod('Button', { type: 'link' });
+<Button text="I'm theme action" type="link" /> //сработает
+<Button text="I'm all together" theme="action" /> не сработает
+```
+
+Полный пример:
+```
+//задаём имя блоку
+let blockButton = cn('Button');
+
+//реализация блока
+let Button = (props) => {
+    return <div className={blockButton(null, [props.className])}>{props.children}</div> 
+};
+
+//модификация блока
+let withThemeButton = withBemMod(blockButton(), {theme: 'red'});
+
+//конечный компонент
+let EndButton = withThemeButton(Button);
+function App() {
+    return (
+        <div>
+            <EndButton className="Mix" children="кнопка с миксом"/> // <div class="Button Mix">кнопка с миксом</div>
+            <EndButton theme="red" children="кнопка с модификатором"/> //<div class="Button Button_theme_red">кнопка с модификатором</div>
+        </div>
+    )
+}
+```
+
+Для динамического подключения **c JS**:
+1) указывем первый аргумент - строку с названием блока, к которому будет применяться модификатор
+2) указывем второй аргумент в виде объекта - ключ - проп, который будет передаваться JSX, занчение - значение пропа в JSX (пример см. выше)
+3) указываем третий компонент - ФУНКЦИЮ, которая принимает КОМПОНЕНТ, пришедший из внешней функции, получает текущие пропсы и возвращает новый компонент:
+
+```
+//задаём имя блоку
+let blockButton = cn('Button');
+
+//реализация блока
+let Button = (props) => {
+    return <div className={blockButton(null, [props.className])}>{props.children}</div> 
+};
+
+//модификация блока JS
+let withThemeDynamic = withBemMod(blockButton(), {dynamic: true},
+    EndButton => props => {
+        return (
+        <EndButton{...props}>Yep</EndButton>
+        )
+    });
+
+//конечный компонент
+let EndButton = withThemeDynamic(Button)
+function App() {
+    return (
+        <div>
+            let EndButton = withThemeDynamic(Button) //<div class="Button Button_dynamic">Yep</div>
+        </div>
+    )
+}
+```
+
 Функции **`compose(bemModFuncs)(Base)`**, **`composeU(bemModFuncs)(Base)`**. В случае, если используются модификаторы с одинковым значением, то используется `composeU(arg)` (может быть вложена в качестве аргумента в `compose(arg)`, тогда *Base* не указывается). Главное - ОБРАТИТЬ ВНИМАНИЕ НА ПРАВИЛЬНЫЙ ПОРЯДОК! То, что указано ПЕРВЫМ, будет первым отрендерино!
 
 Аргументы:
 * *bemModFuncs* - функция/функции, возвращаемые из `withBemMod()`
 * *Base* - компонент/класс/функция - исходный блок
-
 
 Все функции при этом разбрасываются по разным файлам/папкам.
 
@@ -1343,6 +1424,39 @@ export const App = () => {
     <Button text="I'm all together" theme="action" type="link" />
     // Renders into HTML as: <a class="Button Button_theme_action Button_type_link">I'm all together</a>
   </div>
+}
+```
+
+Есть так же возможность загружать части кода, связанные с модификатором только в случае, если модификатор установлен (он может быть не установлен вообще, тогда исходный бандл не будет содержать этого кода). В этом случае необходимо воспользоваться хелпером React.lazy (см.документацию по реакту), подгрузить его в третьем аргументе и вернуть нужную обвязку. 
+
+РЕНДЕРИНГ ЧЕРЕЗ ПРОПСЫ:
+
+```
+let name = cn('Render')
+
+let RenderProps = props => {
+    return (
+        <div className={name(null, [props.className])}>
+            {props.children(name('Elem'))} //возьмёт функцию из RenderProps, передаст ей в качестве аргумента name('Elem')
+        </div>
+    )
+}
+
+function App() {
+    return (
+        <div>
+            <RenderProps> //вернёт внешнюю обвязку <div class="Render">
+                {
+                    (mix)=>{ //возьмёт в качестве аргумента то, что передавала сам rjvgjztzn 
+                        return <>
+                        <div className={mix}>Item</div> // вернет <div class="Render-Elem">Item</div>
+                        <div className={mix}>Item2</div> // <div class="Render-Elem">Item2</div>
+                        </>
+                    }
+                }
+            </RenderProps>
+        </div>
+    )
 }
 ```
 
